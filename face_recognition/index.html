@@ -1,0 +1,1504 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Datalake 3.0 Offline Security Prototype</title>
+  <style>
+    :root {
+      --ink: #101820;
+      --muted: #5c6875;
+      --line: #d9e0e7;
+      --panel: #ffffff;
+      --soft: #f4f7fa;
+      --field: #f9fbfc;
+      --brand: #0d6e8c;
+      --brand-dark: #084b62;
+      --accent: #f2c230;
+      --safe: #198754;
+      --warn: #b7791f;
+      --danger: #b42318;
+      --shadow: 0 22px 60px rgba(16, 24, 32, .12);
+      --radius: 8px;
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-width: 320px;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      color: var(--ink);
+      background: #eaf0f5;
+    }
+
+    button, input, select, textarea { font: inherit; }
+    button { cursor: pointer; }
+    .hidden { display: none !important; }
+
+    .auth {
+      min-height: 100vh;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(360px, 470px);
+      background:
+        linear-gradient(90deg, rgba(6, 22, 31, .88), rgba(6, 22, 31, .34)),
+        url("https://images.unsplash.com/photo-1550751827-4bd374c3f58b?auto=format&fit=crop&w=1800&q=82") center / cover;
+    }
+
+    .hero {
+      min-height: 100vh;
+      padding: 56px;
+      color: white;
+      display: flex;
+      flex-direction: column;
+      justify-content: flex-end;
+    }
+
+    .hero h1 {
+      margin: 0 0 16px;
+      max-width: 900px;
+      font-size: clamp(2.4rem, 6vw, 5.4rem);
+      line-height: .95;
+      letter-spacing: 0;
+    }
+
+    .hero p {
+      margin: 0;
+      max-width: 760px;
+      color: rgba(255,255,255,.84);
+      line-height: 1.65;
+      font-size: 1.04rem;
+    }
+
+    .auth-panel {
+      min-height: 100vh;
+      padding: 42px;
+      display: flex;
+      align-items: center;
+      background: rgba(249, 251, 252, .96);
+      backdrop-filter: blur(18px);
+      border-left: 1px solid rgba(255,255,255,.35);
+    }
+
+    .card, .panel {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+    }
+
+    .card { width: 100%; padding: 28px; }
+    .panel { padding: 20px; box-shadow: 0 12px 34px rgba(16,24,32,.07); }
+    .panel h3, .card h2 { margin: 0 0 12px; }
+
+    .brand {
+      display: flex;
+      gap: 12px;
+      align-items: center;
+      margin-bottom: 24px;
+    }
+
+    .mark {
+      width: 44px;
+      height: 44px;
+      display: grid;
+      place-items: center;
+      border-radius: 8px;
+      background: var(--brand);
+      color: white;
+      font-weight: 900;
+    }
+
+    .brand strong, .brand span { display: block; }
+    .brand span { color: var(--muted); font-size: .84rem; margin-top: 2px; }
+
+    label { display: block; margin: 14px 0 7px; font-size: .9rem; font-weight: 800; }
+    input, select, textarea {
+      width: 100%;
+      padding: 12px 13px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--field);
+      color: var(--ink);
+      outline: none;
+    }
+
+    textarea { min-height: 92px; resize: vertical; }
+    input:focus, select:focus, textarea:focus {
+      border-color: var(--brand);
+      box-shadow: 0 0 0 3px rgba(13, 110, 140, .15);
+    }
+
+    .btn {
+      border: 1px solid transparent;
+      border-radius: 8px;
+      min-height: 44px;
+      padding: 11px 14px;
+      display: inline-flex;
+      justify-content: center;
+      align-items: center;
+      gap: 8px;
+      font-weight: 850;
+    }
+
+    .btn.primary { background: var(--brand); color: white; }
+    .btn.secondary { background: white; color: var(--ink); border-color: var(--line); }
+    .btn.warning { background: #fff8df; color: #7a540d; border-color: #ead388; }
+    .btn.danger { background: #fff0ed; color: var(--danger); border-color: #efc0b7; }
+    .full { width: 100%; }
+    .hint { color: var(--muted); font-size: .84rem; line-height: 1.5; }
+    .error { color: var(--danger); min-height: 20px; font-size: .86rem; margin-top: 10px; }
+
+    .app {
+      min-height: 100vh;
+      display: grid;
+      grid-template-columns: 292px minmax(0, 1fr);
+    }
+
+    .side {
+      position: sticky;
+      top: 0;
+      height: 100vh;
+      padding: 24px 18px;
+      background: #0b202b;
+      color: white;
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+    }
+
+    .side .brand { margin: 0 6px 8px; }
+    .side .brand span { color: rgba(255,255,255,.66); }
+    .side .mark { background: var(--accent); color: #13202a; }
+
+    .nav { display: grid; gap: 6px; }
+    .nav button {
+      border: 0;
+      border-radius: 8px;
+      padding: 12px;
+      background: transparent;
+      color: rgba(255,255,255,.72);
+      text-align: left;
+      font-weight: 800;
+    }
+
+    .nav button.active, .nav button:hover { color: white; background: rgba(255,255,255,.1); }
+
+    .operator {
+      margin-top: auto;
+      padding: 14px;
+      border-radius: 8px;
+      border: 1px solid rgba(255,255,255,.14);
+      background: rgba(255,255,255,.08);
+    }
+
+    .operator strong, .operator span { display: block; overflow-wrap: anywhere; }
+    .operator span { color: rgba(255,255,255,.66); font-size: .82rem; margin-top: 3px; }
+    .operator .btn { width: 100%; margin-top: 12px; color: white; border-color: rgba(255,255,255,.24); background: transparent; }
+
+    .topbar {
+      position: sticky;
+      top: 0;
+      z-index: 5;
+      padding: 14px 28px;
+      background: rgba(234, 240, 245, .9);
+      backdrop-filter: blur(14px);
+      border-bottom: 1px solid var(--line);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 16px;
+    }
+
+    .topbar h2 { margin: 0; font-size: 1.08rem; }
+    .top-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+    .content { max-width: 1440px; margin: 0 auto; padding: 26px 28px 44px; }
+    .section { display: none; }
+    .section.active { display: block; }
+
+    .status-strip {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(150px, 1fr));
+      gap: 14px;
+      margin-bottom: 18px;
+    }
+
+    .metric {
+      background: white;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 16px;
+      min-height: 112px;
+    }
+
+    .metric span { color: var(--muted); font-size: .8rem; font-weight: 800; }
+    .metric strong { display: block; margin-top: 10px; font-size: 1.75rem; }
+
+    .grid-2 { display: grid; grid-template-columns: minmax(320px, 1fr) minmax(320px, 1fr); gap: 16px; align-items: start; }
+    .grid-3 { display: grid; grid-template-columns: repeat(3, minmax(220px, 1fr)); gap: 14px; }
+    .hero-panel {
+      min-height: 330px;
+      color: white;
+      border-radius: 8px;
+      padding: 30px;
+      display: flex;
+      flex-direction: column;
+      justify-content: flex-end;
+      background:
+        linear-gradient(90deg, rgba(8, 33, 45, .9), rgba(8, 33, 45, .18)),
+        url("https://images.unsplash.com/photo-1516321318423-f06f85e504b3?auto=format&fit=crop&w=1600&q=82") center / cover;
+      box-shadow: var(--shadow);
+    }
+
+    .hero-panel h1 { margin: 0 0 12px; font-size: clamp(2rem, 4vw, 4rem); line-height: 1; }
+    .hero-panel p { margin: 0; max-width: 690px; color: rgba(255,255,255,.84); line-height: 1.6; }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      border-radius: 999px;
+      padding: 6px 9px;
+      font-size: .73rem;
+      font-weight: 900;
+      background: #e9f5f8;
+      color: var(--brand-dark);
+    }
+
+    .badge.safe { background: #e9f7ef; color: var(--safe); }
+    .badge.warn { background: #fff8df; color: var(--warn); }
+    .badge.danger { background: #fff0ed; color: var(--danger); }
+
+    .camera-shell {
+      position: relative;
+      overflow: hidden;
+      min-height: 350px;
+      border-radius: 8px;
+      background: #07131a;
+      border: 1px solid #102a38;
+    }
+
+    video, canvas { width: 100%; height: 350px; object-fit: cover; display: block; }
+    .scan-overlay {
+      position: absolute;
+      inset: 22px;
+      border: 2px solid rgba(242,194,48,.86);
+      border-radius: 8px;
+      pointer-events: none;
+    }
+
+    .scan-overlay::after {
+      content: "";
+      position: absolute;
+      left: 8%;
+      right: 8%;
+      top: 20%;
+      height: 2px;
+      background: rgba(242,194,48,.9);
+      box-shadow: 0 0 18px rgba(242,194,48,.75);
+      animation: scan 2.4s infinite ease-in-out;
+    }
+
+    @keyframes scan {
+      0%, 100% { transform: translateY(-34px); }
+      50% { transform: translateY(176px); }
+    }
+
+    .camera-state {
+      position: absolute;
+      left: 18px;
+      right: 18px;
+      bottom: 18px;
+      padding: 12px;
+      border-radius: 8px;
+      background: rgba(7,19,26,.82);
+      color: white;
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      align-items: center;
+      border: 1px solid rgba(255,255,255,.16);
+    }
+
+    .progress {
+      height: 10px;
+      overflow: hidden;
+      border-radius: 999px;
+      background: #dfe7ee;
+    }
+
+    .progress div {
+      height: 100%;
+      width: var(--value);
+      background: linear-gradient(90deg, var(--brand), var(--accent));
+      border-radius: 999px;
+      transition: width .25s ease;
+    }
+
+    .challenge-list, .audit-list, .hook-list { display: grid; gap: 10px; }
+    .item {
+      padding: 12px;
+      border-radius: 8px;
+      background: var(--soft);
+      border: 1px solid var(--line);
+      line-height: 1.45;
+    }
+
+    .item strong { display: block; margin-bottom: 4px; }
+    .item small { color: var(--muted); }
+    .item.done { border-color: #bfe5cf; background: #edf9f2; }
+    .item.active { border-color: #efd179; background: #fff9e8; }
+
+    .control-row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 14px; }
+    .table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 8px; background: white; }
+    table { width: 100%; border-collapse: collapse; min-width: 760px; }
+    th, td { border-bottom: 1px solid var(--line); padding: 12px 14px; text-align: left; vertical-align: top; }
+    th { background: var(--soft); color: var(--muted); text-transform: uppercase; font-size: .78rem; }
+    tr:last-child td { border-bottom: 0; }
+
+    pre {
+      margin: 0;
+      overflow: auto;
+      padding: 14px;
+      border-radius: 8px;
+      background: #0b202b;
+      color: #d8f3ff;
+      line-height: 1.5;
+      font-size: .88rem;
+    }
+
+    .toast {
+      position: fixed;
+      right: 22px;
+      bottom: 22px;
+      z-index: 30;
+      background: #0b202b;
+      color: white;
+      padding: 12px 14px;
+      border-radius: 8px;
+      box-shadow: var(--shadow);
+      opacity: 0;
+      pointer-events: none;
+      transform: translateY(12px);
+      transition: .22s ease;
+    }
+    .toast.show { opacity: 1; transform: translateY(0); }
+
+    @media (max-width: 1100px) {
+      .app { grid-template-columns: 1fr; }
+      .side { position: relative; height: auto; display: block; }
+      .nav { display: flex; overflow-x: auto; padding-bottom: 8px; }
+      .nav button { white-space: nowrap; }
+      .operator { margin-top: 10px; }
+      .grid-2, .grid-3, .status-strip { grid-template-columns: 1fr; }
+    }
+
+    @media (max-width: 760px) {
+      .auth { grid-template-columns: 1fr; }
+      .hero { min-height: 42vh; padding: 28px; }
+      .auth-panel { min-height: auto; padding: 18px; }
+      .content, .topbar { padding-left: 16px; padding-right: 16px; }
+      .topbar { align-items: flex-start; flex-direction: column; }
+      video, canvas { height: 290px; }
+    }
+  </style>
+</head>
+<body>
+  <div id="authScreen" class="auth">
+    <section class="hero">
+      <h1>Datalake 3.0 Offline Security</h1>
+      <p>Prototype a zero-network access flow with local liveness challenges, encrypted vault concepts, audit logs, and deployment hooks for uninterrupted field operations.</p>
+    </section>
+    <aside class="auth-panel">
+      <div class="card">
+        <div class="brand">
+          <div class="mark">DL</div>
+          <div><strong>Datalake 3.0</strong><span>Offline identity gateway</span></div>
+        </div>
+        <h2>Operator Login</h2>
+        <label for="loginUser">Operator ID</label>
+        <input id="loginUser" autocomplete="username" placeholder="field.admin">
+        <label for="loginPin">Offline PIN</label>
+        <input id="loginPin" type="password" autocomplete="current-password" placeholder="123456">
+        <button class="btn primary full" id="loginBtn" type="button">Unlock Console</button>
+        <p class="hint">Demo access: <strong>field.admin</strong> / <strong>123456</strong>. This is a local prototype and does not transmit data.</p>
+        <div id="loginError" class="error"></div>
+      </div>
+    </aside>
+  </div>
+
+  <div id="appScreen" class="app hidden">
+    <aside class="side">
+      <div class="brand">
+        <div class="mark">DL</div>
+        <div><strong>Datalake 3.0</strong><span>Zero-network security</span></div>
+      </div>
+      <nav class="nav">
+        <button class="active" data-section="dashboard">Dashboard</button>
+        <button data-section="liveness">Liveness Check</button>
+        <button data-section="enrollment">Enrollment Vault</button>
+        <button data-section="integration">Integration</button>
+        <button data-section="audit">Audit Trail</button>
+      </nav>
+      <div class="operator">
+        <strong id="operatorName">Field Admin</strong>
+        <span id="operatorMode">Offline mode ready</span>
+        <button class="btn" id="logoutBtn" type="button">Logout</button>
+      </div>
+    </aside>
+
+    <main>
+      <header class="topbar">
+        <div>
+          <h2 id="sectionTitle">Dashboard</h2>
+          <span class="hint" id="networkState">Network: disabled by design</span>
+        </div>
+        <div class="top-actions">
+          <button class="btn secondary" id="exportAuditBtn" type="button">Export Audit</button>
+          <button class="btn warning" id="toggleNetworkBtn" type="button">Simulate Network Loss</button>
+          <button class="btn danger" id="clearBtn" type="button">Clear Prototype Data</button>
+        </div>
+      </header>
+
+      <div class="content">
+        <section id="dashboard" class="section active">
+          <div class="status-strip">
+            <div class="metric"><span>Operation Mode</span><strong id="metricMode">Offline</strong></div>
+            <div class="metric"><span>Vault State</span><strong id="metricVault">Locked</strong></div>
+            <div class="metric"><span>Liveness Score</span><strong id="metricLive">0%</strong></div>
+            <div class="metric"><span>Audit Events</span><strong id="metricAudit">0</strong></div>
+          </div>
+          <div class="grid-2">
+            <div class="hero-panel">
+              <h1>Security that keeps working when the network does not.</h1>
+              <p>This prototype shows how Datalake 3.0 can gate sensitive offline workflows using local liveness challenges, encrypted local records, signed audit events, and deterministic fallback controls.</p>
+            </div>
+            <div class="panel">
+              <h3>Technology Stack</h3>
+              <div class="hook-list">
+                <div class="item"><strong>Capture</strong><small>WebRTC camera stream with no cloud upload.</small></div>
+                <div class="item"><strong>Inference Layer</strong><small>Pluggable TensorFlow Lite, ONNX Runtime, OpenCV, or WebAssembly liveness model.</small></div>
+                <div class="item"><strong>Secure Storage</strong><small>WebCrypto AES-GCM vault, salted key derivation, local-only encrypted payloads.</small></div>
+                <div class="item"><strong>Integration</strong><small>Local SDK events for Datalake 3.0 access decisions and sync-safe audit export.</small></div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section id="liveness" class="section">
+          <div class="grid-2">
+            <div class="panel">
+              <h3>Offline Liveness Challenge</h3>
+              <div class="camera-shell">
+                <video id="camera" autoplay muted playsinline></video>
+                <canvas id="fallbackCanvas" class="hidden"></canvas>
+                <div class="scan-overlay"></div>
+                <div class="camera-state">
+                  <strong id="cameraStatus">Camera not started</strong>
+                  <span class="badge warn" id="livenessBadge">Pending</span>
+                </div>
+              </div>
+              <div class="control-row">
+                <button class="btn primary" id="startCameraBtn" type="button"> Start Camera </button>
+                <button class="btn secondary" id="runChallengeBtn" type="button"> Run Challenge </button>
+                <button class="btn secondary" id="stopCameraBtn" type="button"> Stop Camera </button>
+                <button class="btn primary" id="recognizeBtn" type="button"> Recognize Face </button>
+              </div>
+              <p id="recognitionResult" class="hint" style="margin-top:10px;"> Waiting for recognition... </p>
+              <p class="hint">The prototype performs challenge flow and motion-quality scoring locally. It intentionally does not identify a person from biometric templates.</p>
+            </div>
+            <div class="panel">
+              <h3>Challenge Progress</h3>
+              <div class="progress" style="--value:0%"><div id="liveProgress"></div></div>
+              <div id="challengeList" class="challenge-list" style="margin-top:14px"></div>
+            </div>
+          </div>
+        </section>
+
+        <section id="enrollment" class="section">
+          <div class="grid-2">
+            <div class="panel">
+              <h3>Encrypted Local Vault</h3>
+              <label for="personName">Operator Name</label>
+              <input id="personName" placeholder="Field Operator">
+              <label for="personRole">Access Role</label>
+              <select id="personRole">
+                <option>Field Inspector</option>
+                <option>Data Steward</option>
+                <option>Security Supervisor</option>
+                <option>Emergency Admin</option>
+              </select>
+              <label for="passphrase">Vault Passphrase</label>
+              <input id="passphrase" type="password" placeholder="Minimum 8 characters">
+              <button class="btn primary full" id="createVaultBtn" type="button">Create Encrypted Vault Record</button>
+              <button class="btn secondary full" id="enrollFaceBtn" type="button" style="margin-top:10px;"> Enroll Face </button>
+              <p id="enrollStatus" class="hint"> No face enrolled yet.</p>
+              <p class="hint">Stores a privacy-safe record: operator metadata, consent flag, liveness policy, and encrypted access material. No face template is generated.</p>
+            </div>
+            <div class="panel">
+              <h3>Vault Preview</h3>
+              <pre id="vaultPreview">No local vault record yet.</pre>
+            </div>
+          </div>
+        </section>
+
+        <section id="integration" class="section">
+          <div class="grid-2">
+            <div class="panel">
+              <h3>Datalake 3.0 Integration Hooks</h3>
+              <div class="hook-list">
+                <div class="item"><strong>beforeSensitiveAction()</strong><small>Require recent liveness token before opening protected records.</small></div>
+                <div class="item"><strong>offlineAccessDecision()</strong><small>Return allow, step-up, deny, or fallback based on local policy.</small></div>
+                <div class="item"><strong>appendSignedAudit()</strong><small>Write tamper-evident event chain for later synchronization.</small></div>
+                <div class="item"><strong>rotateLocalKeys()</strong><small>Re-wrap local vault material after recovery or admin unlock.</small></div>
+              </div>
+            </div>
+            <div class="panel">
+              <h3>Sample SDK Contract</h3>
+              <pre id="sdkCode"></pre>
+            </div>
+          </div>
+        </section>
+
+        <section id="audit" class="section">
+          <div class="panel">
+            <h3>Offline Audit Trail</h3>
+            <div class="table-wrap">
+              <table>
+                <thead><tr><th>Time</th><th>Event</th><th>Result</th><th>Hash Chain</th></tr></thead>
+                <tbody id="auditRows"></tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+      </div>
+    </main>
+  </div>
+
+  
+<div id="toast" class="toast"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
+
+<script>
+    const $ = (id) => document.getElementById(id);
+    const state = {
+      operator: null,
+      cameraStream: null,
+      livenessScore: 0,
+      vault: JSON.parse(localStorage.getItem("dl3_vault") || "null"),
+      audit: JSON.parse(localStorage.getItem("dl3_audit") || "[]"),
+      networkOffline: true
+    };
+
+    const challenges = [
+      { key: "presence", label: "Face presence window stable", detail: "Camera stream active and frame brightness stable." },
+      { key: "blink", label: "Blink or eye movement prompt", detail: "Challenge-response check placeholder for local model." },
+      { key: "turn", label: "Turn head left, then center", detail: "Randomized motion challenge placeholder." },
+      { key: "hold", label: "Hold still for verification token", detail: "Short temporal consistency check." }
+    ];
+
+    function toast(message) {
+      $("toast").textContent = message;
+      $("toast").classList.add("show");
+      setTimeout(() => $("toast").classList.remove("show"), 2200);
+    }
+
+    async function digest(text) {
+      const bytes = new TextEncoder().encode(text);
+      const hash = await crypto.subtle.digest("SHA-256", bytes);
+      return [...new Uint8Array(hash)].map(b => b.toString(16).padStart(2, "0")).join("").slice(0, 24);
+    }
+
+    async function audit(event, result) {
+      const previous = state.audit.at(-1)?.chain || "GENESIS";
+      const entry = {
+        time: new Date().toLocaleString(),
+        event,
+        result,
+        chain: await digest(`${previous}|${event}|${result}|${Date.now()}`)
+      };
+      state.audit.push(entry);
+      localStorage.setItem("dl3_audit", JSON.stringify(state.audit));
+      renderAudit();
+      updateMetrics();
+    }
+
+    function updateMetrics() {
+      $("metricMode").textContent = state.networkOffline ? "Offline" : "Online";
+      $("metricVault").textContent = state.vault ? "Sealed" : "Empty";
+      $("metricLive").textContent = `${state.livenessScore}%`;
+      $("metricAudit").textContent = state.audit.length;
+      $("networkState").textContent = state.networkOffline ? "Network: disabled by design" : "Network: simulated online";
+      $("operatorMode").textContent = state.networkOffline ? "Offline mode ready" : "Online simulation";
+    }
+
+    function renderAudit() {
+      $("auditRows").innerHTML = state.audit.map(row => `
+        <tr><td>${row.time}</td><td>${row.event}</td><td>${row.result}</td><td>${row.chain}</td></tr>
+      `).join("") || `<tr><td colspan="4">No audit events yet.</td></tr>`;
+    }
+
+    function renderChallenges(activeIndex = -1, doneCount = 0) {
+      $("challengeList").innerHTML = challenges.map((c, i) => {
+        const cls = i < doneCount ? "done" : i === activeIndex ? "active" : "";
+        const stateText = i < doneCount ? "Complete" : i === activeIndex ? "In progress" : "Queued";
+        return `<div class="item ${cls}"><strong>${c.label}</strong><small>${c.detail} Status: ${stateText}.</small></div>`;
+      }).join("");
+    }
+
+    function renderVault() {
+      $("vaultPreview").textContent = state.vault ? JSON.stringify(state.vault, null, 2) : "No local vault record yet.";
+      updateMetrics();
+    }
+
+    function showApp(operator) {
+      state.operator = operator;
+      sessionStorage.setItem("dl3_operator", operator);
+      $("operatorName").textContent = operator;
+      $("authScreen").classList.add("hidden");
+      $("appScreen").classList.remove("hidden");
+      audit("operator.login", "allowed");
+      updateMetrics();
+    }
+
+    $("loginBtn").addEventListener("click", () => {
+      const user = $("loginUser").value.trim() || "field.admin";
+      const pin = $("loginPin").value.trim();
+      if (user !== "field.admin" || pin !== "123456") {
+        $("loginError").textContent = "Invalid offline operator credentials.";
+        return;
+      }
+      $("loginError").textContent = "";
+      showApp("Field Admin");
+    });
+
+    document.querySelectorAll(".nav button").forEach(btn => {
+      btn.addEventListener("click", () => {
+        document.querySelectorAll(".nav button").forEach(b => b.classList.remove("active"));
+        document.querySelectorAll(".section").forEach(section => section.classList.remove("active"));
+        btn.classList.add("active");
+        $(btn.dataset.section).classList.add("active");
+        $("sectionTitle").textContent = btn.textContent;
+      });
+    });
+
+    $("logoutBtn").addEventListener("click", async () => {
+      await stopCamera();
+      await audit("operator.logout", "complete");
+      sessionStorage.removeItem("dl3_operator");
+      $("appScreen").classList.add("hidden");
+      $("authScreen").classList.remove("hidden");
+      toast("Logged out");
+    });
+
+    async function startCamera() {
+      try {
+        state.cameraStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" }, audio: false });
+        $("camera").srcObject = state.cameraStream;
+        $("camera").classList.remove("hidden");
+        $("fallbackCanvas").classList.add("hidden");
+        $("cameraStatus").textContent = "Camera active";
+        await audit("camera.start", "active");
+      } catch {
+        drawFallbackCamera();
+        $("cameraStatus").textContent = "Camera unavailable: simulation active";
+        await audit("camera.start", "simulation");
+      }
+      toast("Camera workflow ready");
+    }
+
+    async function stopCamera() {
+      if (state.cameraStream) {
+        state.cameraStream.getTracks().forEach(track => track.stop());
+        state.cameraStream = null;
+      }
+      $("camera").srcObject = null;
+      $("cameraStatus").textContent = "Camera stopped";
+    }
+
+    function drawFallbackCamera() {
+      const canvas = $("fallbackCanvas");
+      const ctx = canvas.getContext("2d");
+      canvas.width = 900;
+      canvas.height = 520;
+      $("camera").classList.add("hidden");
+      canvas.classList.remove("hidden");
+      ctx.fillStyle = "#07131a";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.strokeStyle = "#f2c230";
+      ctx.lineWidth = 5;
+      ctx.strokeRect(260, 80, 380, 360);
+      ctx.fillStyle = "#d8f3ff";
+      ctx.font = "700 30px system-ui";
+      ctx.textAlign = "center";
+      ctx.fillText("Offline camera simulation", 450, 260);
+      ctx.font = "500 18px system-ui";
+      ctx.fillText("Connect a camera to run live capture", 450, 294);
+    }
+
+    $("stopCameraBtn").addEventListener("click", async () => {
+      await stopCamera();
+      await audit("camera.stop", "complete");
+      toast("Camera stopped");
+    });
+
+    $("runChallengeBtn").addEventListener("click", async () => {
+      if (!modelsLoaded) {
+
+  toast(
+    "Start camera first"
+  );
+
+  return;
+}
+
+  blinkDetected = false;
+  smileDetected = false;
+  headTurnDetected = false;
+
+  $("recognitionResult")
+  .textContent =
+  "Perform actions: Blink, Smile, Turn Head";
+
+  const video =
+    $("camera");
+
+  const interval =
+    setInterval(
+      async () => {
+
+      const detection =
+        await faceapi
+        .detectSingleFace(
+          video,
+          new faceapi
+          .TinyFaceDetectorOptions()
+        )
+        .withFaceLandmarks();
+
+      if (!detection)
+        return;
+
+      const landmarks =
+        detection.landmarks;
+
+      detectBlink(
+        landmarks
+      );
+
+      detectSmile(
+        landmarks
+      );
+
+      detectHeadTurn(
+        landmarks
+      );
+
+      // Score
+      let score = 0;
+
+      if (
+        blinkDetected
+      ) score += 33;
+
+      if (
+        smileDetected
+      ) score += 33;
+
+      if (
+        headTurnDetected
+      ) score += 34;
+
+      state.livenessScore =
+        score;
+
+      $("metricLive")
+      .textContent =
+      `${score}%`;
+
+      $("liveProgress")
+      .style.width =
+      `${score}%`;
+
+      if (
+        score >= 100
+      ) {
+
+        clearInterval(
+          interval
+        );
+
+        $("livenessBadge")
+        .textContent =
+        "Passed";
+
+        $("livenessBadge")
+        .className =
+        "badge safe";
+
+        $("recognitionResult")
+        .textContent =
+        "✅ Liveness Passed";
+
+        toast(
+          "Liveness verified"
+        );
+
+        audit(
+          "liveness.challenge",
+          "passed"
+        );
+      }
+
+    }, 300);
+});
+
+    async function deriveVaultRecord(name, role, passphrase) {
+      const salt = crypto.getRandomValues(new Uint8Array(16));
+      const iv = crypto.getRandomValues(new Uint8Array(12));
+      const keyMaterial = await crypto.subtle.importKey("raw", new TextEncoder().encode(passphrase), "PBKDF2", false, ["deriveKey"]);
+      const key = await crypto.subtle.deriveKey(
+        { name: "PBKDF2", salt, iterations: 120000, hash: "SHA-256" },
+        keyMaterial,
+        { name: "AES-GCM", length: 256 },
+        false,
+        ["encrypt"]
+      );
+      const payload = JSON.stringify({
+        name,
+        role,
+        consent: true,
+        policy: "liveness-required-before-sensitive-action",
+        createdAt: new Date().toISOString()
+      });
+      const cipher = await crypto.subtle.encrypt({ name: "AES-GCM", iv }, key, new TextEncoder().encode(payload));
+      return {
+        vaultId: await digest(`${name}|${role}|${Date.now()}`),
+        algorithm: "PBKDF2-SHA256 + AES-GCM-256",
+        iterations: 120000,
+        salt: btoa(String.fromCharCode(...salt)),
+        iv: btoa(String.fromCharCode(...iv)),
+        encryptedBytes: cipher.byteLength,
+        ciphertextPreview: btoa(String.fromCharCode(...new Uint8Array(cipher))).slice(0, 96) + "...",
+        containsBiometricTemplate: false
+      };
+    }
+
+    $("createVaultBtn").addEventListener("click", async () => {
+      const name = $("personName").value.trim();
+      const role = $("personRole").value;
+      const passphrase = $("passphrase").value;
+      if (!name || passphrase.length < 8) {
+        toast("Enter a name and passphrase of at least 8 characters");
+        return;
+      }
+      state.vault = await deriveVaultRecord(name, role, passphrase);
+      localStorage.setItem("dl3_vault", JSON.stringify(state.vault));
+      renderVault();
+      await audit("vault.create", "sealed-local-record");
+      toast("Encrypted vault record created");
+    });
+
+    $("toggleNetworkBtn").addEventListener("click", async () => {
+      state.networkOffline = !state.networkOffline;
+      updateMetrics();
+      await audit("network.mode", state.networkOffline ? "offline" : "simulated-online");
+      toast(state.networkOffline ? "Zero-network mode active" : "Online simulation active");
+    });
+
+    $("exportAuditBtn").addEventListener("click", async () => {
+      const text = JSON.stringify(state.audit, null, 2);
+      try {
+        await navigator.clipboard.writeText(text);
+        toast("Audit copied to clipboard");
+      } catch {
+        toast("Audit ready in the Audit Trail section");
+      }
+    });
+
+    $("clearBtn").addEventListener("click", async () => {
+      localStorage.removeItem("dl3_vault");
+      localStorage.removeItem("dl3_audit");
+      state.vault = null;
+      state.audit = [];
+      state.livenessScore = 0;
+      $("liveProgress").style.width = "0%";
+      renderVault();
+      renderAudit();
+      renderChallenges();
+      updateMetrics();
+      toast("Prototype data cleared");
+    });
+
+    $("sdkCode").textContent = `const DatalakeSecurity = {
+  async beforeSensitiveAction(action) {
+    const token = await OfflineLiveness.requireFreshToken({ maxAgeMs: 300000 });
+    return token.valid ? "allow" : "step-up";
+  },
+
+  async offlineAccessDecision(context) {
+    return {
+      mode: "zero-network",
+      decision: context.livenessScore >= 80 ? "allow" : "fallback",
+      reason: "local-policy-evaluation"
+    };
+  },
+
+  async appendSignedAudit(event) {
+    return LocalAuditChain.append(event);
+  }
+};`;
+
+    renderAudit();
+    renderVault();
+    renderChallenges();
+    updateMetrics();
+    const operator = sessionStorage.getItem("dl3_operator");
+    if (operator) showApp(operator);
+
+  // =========================
+// FACE RECOGNITION ENGINE
+// =========================
+
+const FACE_MATCH_THRESHOLD = 0.74;
+let blinkDetected = false;
+let smileDetected = false;
+let headTurnDetected = false;
+
+let previousEAR = 1;
+let modelsLoaded = false;
+let faceMatcher = null;
+let enrollmentInProgress = false;
+let enrollmentSamples = [];
+const REQUIRED_SAMPLES = 5;
+
+// Load models
+async function loadFaceModels() {
+
+  $("cameraStatus").textContent =
+    "Loading AI models...";
+
+  await faceapi.nets.tinyFaceDetector
+    .loadFromUri("./models");
+
+  await faceapi.nets.faceLandmark68Net
+    .loadFromUri("./models");
+
+  await faceapi.nets.faceRecognitionNet
+    .loadFromUri("./models");
+
+  modelsLoaded = true;
+
+  $("cameraStatus").textContent =
+    "AI Models Ready";
+
+  toast("Face AI Loaded");
+}
+
+// =========================
+// START CAMERA
+// =========================
+
+async function startRecognitionCamera() {
+
+  try {
+
+    const stream =
+      await navigator
+      .mediaDevices
+      .getUserMedia({
+        video: {
+          facingMode: "user"
+        },
+        audio: false
+      });
+
+    const video =
+      $("camera");
+
+    video.srcObject =
+      stream;
+
+    video.play().catch(
+      err => {
+        console.log(
+          "Video play error:",
+          err
+        );
+      }
+    );
+
+    state.cameraStream =
+      stream;
+
+    $("cameraStatus")
+      .textContent =
+      "Camera active";
+
+    toast(
+      "Camera Started"
+    );
+
+    if (!modelsLoaded) {
+
+      $("cameraStatus")
+        .textContent =
+        "Loading AI models...";
+
+      await loadFaceModels();
+    }
+
+  } catch (error) {
+
+    console.error(
+      "Camera Error:",
+      error
+    );
+
+    $("cameraStatus")
+      .textContent =
+      "Camera Error";
+
+    toast(
+      `Error: ${error.message}`
+    );
+  }
+}
+
+// Replace old camera start
+$("startCameraBtn")
+  .addEventListener(
+    "click",
+    startRecognitionCamera
+  );
+
+
+// =========================
+// MULTI-FACE ENROLLMENT
+// =========================
+
+$("enrollFaceBtn")
+.addEventListener(
+"click",
+async () => {
+
+  const name =
+    $("personName")
+    .value
+    .trim();
+
+  if (!name) {
+
+    toast(
+      "Enter operator name first"
+    );
+
+    return;
+  }
+
+  if (!modelsLoaded) {
+
+    toast(
+      "Start camera first"
+    );
+
+    return;
+  }
+
+  enrollmentInProgress =
+    true;
+
+  enrollmentSamples =
+    [];
+
+  const instructions = [
+    "Look Straight",
+    "Turn Slightly Left",
+    "Turn Slightly Right",
+    "Look Slightly Up",
+    "Look Slightly Down"
+  ];
+
+  toast(
+    "Starting face enrollment"
+  );
+
+  const video =
+    $("camera");
+
+  for (
+    let i = 0;
+    i < REQUIRED_SAMPLES;
+    i++
+  ) {
+
+    $("enrollStatus")
+    .textContent =
+    `Sample ${
+      i + 1
+    }/${REQUIRED_SAMPLES}
+    : ${
+      instructions[i]
+    }`;
+
+    toast(
+      instructions[i]
+    );
+
+    // wait 2 sec
+    await new Promise(
+      resolve =>
+      setTimeout(
+        resolve,
+        2000
+      )
+    );
+
+    const detection =
+      await faceapi
+      .detectSingleFace(
+        video,
+        new faceapi
+        .TinyFaceDetectorOptions()
+      )
+      .withFaceLandmarks()
+      .withFaceDescriptor();
+
+    if (!detection) {
+
+      toast(
+        `Face not detected for sample ${
+          i + 1
+        }`
+      );
+
+      i--;
+      continue;
+    }
+
+    enrollmentSamples
+    .push(
+      Array.from(
+        detection
+        .descriptor
+      )
+    );
+  }
+
+  // Save DB
+  const db =
+    JSON.parse(
+      localStorage.getItem(
+        "face_db"
+      ) || "[]"
+    );
+
+  // remove old same-name entry
+  const filtered =
+    db.filter(
+      p =>
+      p.label !== name
+    );
+
+  filtered.push({
+    label: name,
+    descriptors:
+      enrollmentSamples
+  });
+
+  localStorage.setItem(
+    "face_db",
+    JSON.stringify(
+      filtered
+    )
+  );
+
+  $("enrollStatus")
+  .textContent =
+  `✅ ${name}
+   enrolled with
+   ${REQUIRED_SAMPLES}
+   samples`;
+
+  toast(
+    "Enrollment complete"
+  );
+
+  enrollmentInProgress =
+    false;
+
+  await audit(
+    "face.enrollment",
+    "multi-sample-success"
+  );
+});
+
+
+// =========================
+// LOAD FACE DATABASE
+// =========================
+
+function loadDatabase() {
+
+  const db =
+    JSON.parse(
+      localStorage.getItem(
+        "face_db"
+      ) || "[]"
+    );
+
+  if (!db.length)
+    return;
+
+  const labeledDescriptors =
+    db.map(person => {
+
+      const descriptors =
+        person.descriptors.map(
+          d =>
+          new Float32Array(d)
+        );
+
+      return new faceapi
+        .LabeledFaceDescriptors(
+          person.label,
+          descriptors
+        );
+    });
+
+  faceMatcher =
+    new faceapi.FaceMatcher(
+      labeledDescriptors,
+      FACE_MATCH_THRESHOLD
+    );
+}
+
+
+// =========================
+// RECOGNIZE FACE
+// =========================
+// =========================
+// LIVENESS DETECTION
+// =========================
+
+// Eye Aspect Ratio
+function calculateEAR(eye) {
+
+  const distance = (a, b) =>
+    Math.hypot(
+      a.x - b.x,
+      a.y - b.y
+    );
+
+  const vertical1 =
+    distance(eye[1], eye[5]);
+
+  const vertical2 =
+    distance(eye[2], eye[4]);
+
+  const horizontal =
+    distance(eye[0], eye[3]);
+
+  return (
+    (vertical1 + vertical2) /
+    (2.0 * horizontal)
+  );
+}
+
+
+// Blink Detection
+function detectBlink(landmarks) {
+
+  const leftEye =
+    landmarks.getLeftEye();
+
+  const rightEye =
+    landmarks.getRightEye();
+
+  const leftEAR =
+    calculateEAR(leftEye);
+
+  const rightEAR =
+    calculateEAR(rightEye);
+
+  const avgEAR =
+    (leftEAR + rightEAR) / 2;
+
+  // eye closed threshold
+  if (
+    previousEAR > 0.22 &&
+    avgEAR < 0.18
+  ) {
+
+    blinkDetected = true;
+
+    toast("Blink Detected");
+
+    console.log(
+      "Blink detected"
+    );
+  }
+
+  previousEAR = avgEAR;
+}
+
+
+// Smile Detection
+function detectSmile(landmarks) {
+
+  const mouth =
+    landmarks.getMouth();
+
+  const mouthWidth =
+    Math.abs(
+      mouth[6].x -
+      mouth[0].x
+    );
+
+  const mouthHeight =
+    Math.abs(
+      mouth[9].y -
+      mouth[3].y
+    );
+
+  const smileRatio =
+    mouthWidth /
+    mouthHeight;
+
+  if (
+    smileRatio > 1.5
+  ) {
+
+    smileDetected = true;
+
+    toast(
+      "Smile Detected"
+    );
+
+    console.log(
+      "Smile detected"
+    );
+  }
+}
+
+
+// Head Turn Detection
+function detectHeadTurn(
+  landmarks
+) {
+
+  const nose =
+    landmarks.getNose();
+
+  const jaw =
+    landmarks.getJawOutline();
+
+  const noseX =
+    nose[3].x;
+
+  const faceCenter =
+    (
+      jaw[0].x +
+      jaw[16].x
+    ) / 2;
+
+  const offset =
+    noseX - faceCenter;
+
+  if (
+    Math.abs(offset) > 20
+  ) {
+
+    headTurnDetected =
+      true;
+
+    toast(
+      "Head Turn Detected"
+    );
+
+    console.log(
+      "Head turn detected"
+    );
+  }
+}
+$("recognizeBtn")
+.addEventListener(
+  "click",
+  async () => {
+
+    loadDatabase();
+
+    if (!faceMatcher) {
+
+      toast(
+        "No enrolled users"
+      );
+
+      return;
+    }
+
+    const video =
+      $("camera");
+
+    const detection =
+      await faceapi
+      .detectSingleFace(
+        video,
+        new faceapi
+        .TinyFaceDetectorOptions()
+      )
+      .withFaceLandmarks()
+      .withFaceDescriptor();
+
+    if (!detection) {
+
+      $("recognitionResult")
+      .textContent =
+      "No face found";
+
+      return;
+    }
+
+    const result =
+      faceMatcher.findBestMatch(
+        detection.descriptor
+      );
+      console.log("Distance:", result.distance);
+
+    if (
+      result.label ===
+      "unknown"
+    ) {
+
+      $("recognitionResult")
+      .textContent =
+      "❌ Unknown Person";
+
+      toast(
+        "Face not recognized"
+      );
+
+      await audit(
+        "recognition",
+        "failed"
+      );
+
+      return;
+    }
+
+    $("recognitionResult")
+    .textContent =
+    `✅ Welcome ${result.label}`;
+
+    toast(
+      `Recognized ${result.label}`
+    );
+
+    await audit(
+      "recognition",
+      result.label
+    );
+
+});
+  </script>
+</body>
+</html>
