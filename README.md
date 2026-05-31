@@ -1,3 +1,4 @@
+Contributed AWS Sync architecture and offline queue design.
 # ZeroNetwork-Facial-Authentication
 Offline-first facial recognition and liveness detection system for secure authentication in zero-network environments with local verification, encrypted vaults, and audit logging.
 
