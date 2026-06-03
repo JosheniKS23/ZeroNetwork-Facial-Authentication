@@ -44,7 +44,6 @@
         url("https://images.unsplash.com/photo-1550751827-4bd374c3f58b?auto=format&fit=crop&w=1800&q=82") center / cover;
     }
 
-  
     .hero {
       min-height: 100vh;
       padding: 56px;
@@ -392,6 +391,12 @@
       .grid-2, .grid-3, .status-strip { grid-template-columns: 1fr; }
     }
 
+    .conf-badge { display:inline-block; margin-left:8px; font-size:1.2rem; vertical-align:middle; }
+    .conf-badge.green { color: var(--safe); }
+    .conf-badge.yellow { color: var(--accent); }
+    .conf-badge.red { color: var(--danger); }
+    .conf-badge.neutral { color: #9aa5ac; }
+
     @media (max-width: 760px) {
       .auth { grid-template-columns: 1fr; }
       .hero { min-height: 42vh; padding: 28px; }
@@ -502,8 +507,13 @@
                 <button class="btn secondary" id="runChallengeBtn" type="button"> Run Challenge </button>
                 <button class="btn secondary" id="stopCameraBtn" type="button"> Stop Camera </button>
                 <button class="btn primary" id="recognizeBtn" type="button"> Recognize Face </button>
+                <label style="align-self:center; margin-left:8px; color:var(--muted);">Threshold: <strong id="thresholdVal">0.74</strong>
+                  <span title="Lower distance = stricter matching. Lower distance values mean higher similarity. Typical values: 0.40–0.80." style="margin-left:6px; cursor:help; color:var(--muted);">ℹ️</span>
+                </label>
+                <input id="thresholdSlider" type="range" min="0.40" max="1.00" step="0.01" value="0.74" style="width:140px; align-self:center;">
               </div>
               <p id="recognitionResult" class="hint" style="margin-top:10px;"> Waiting for recognition... </p>
+              <p class="hint">Distance: <span id="lastDistance">N/A</span> <span id="lastConfidence" class="conf-badge neutral" title="Confidence indicator">●</span></p>
               <p class="hint">The prototype performs challenge flow and motion-quality scoring locally. It intentionally does not identify a person from biometric templates.</p>
             </div>
             <div class="panel">
@@ -581,6 +591,22 @@
 
 <script>
     const $ = (id) => document.getElementById(id);
+    
+    // Log to both console and server
+    function logToServer(message, level = 'INFO') {
+      const timestamp = new Date().toLocaleTimeString();
+      console.log(`[${timestamp}] ${message}`);
+      
+      // Send to Flask server
+      fetch('/api/log', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message, level })
+      }).catch(err => {
+        // Silently fail if server not available (fallback to console only)
+      });
+    }
+    
     const state = {
       operator: null,
       cameraStream: null,
@@ -664,10 +690,13 @@
     $("loginBtn").addEventListener("click", () => {
       const user = $("loginUser").value.trim() || "field.admin";
       const pin = $("loginPin").value.trim();
+      logToServer(`LOGIN ATTEMPT: user=${user}`);
       if (user !== "field.admin" || pin !== "123456") {
+        logToServer(`LOGIN FAILED: Invalid credentials`, 'ERROR');
         $("loginError").textContent = "Invalid offline operator credentials.";
         return;
       }
+      logToServer(`LOGIN SUCCESS: ${user}`, 'SUCCESS');
       $("loginError").textContent = "";
       showApp("Field Admin");
     });
@@ -683,23 +712,28 @@
     });
 
     $("logoutBtn").addEventListener("click", async () => {
+      logToServer(`LOGOUT: ${state.operator}`);
       await stopCamera();
       await audit("operator.logout", "complete");
       sessionStorage.removeItem("dl3_operator");
+      logToServer(`LOGOUT COMPLETE`, 'SUCCESS');
       $("appScreen").classList.add("hidden");
       $("authScreen").classList.remove("hidden");
       toast("Logged out");
     });
 
     async function startCamera() {
+      logToServer(`START CAMERA: Requesting access...`);
       try {
         state.cameraStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" }, audio: false });
+        logToServer(`START CAMERA SUCCESS: Stream active`, 'SUCCESS');
         $("camera").srcObject = state.cameraStream;
         $("camera").classList.remove("hidden");
         $("fallbackCanvas").classList.add("hidden");
-        $("cameraStatus").textContent = "Camera active";
+        $("cameraStatus").textContent = "Camera Active • AI Ready";
         await audit("camera.start", "active");
-      } catch {
+      } catch (err) {
+        logToServer(`START CAMERA: Fallback to simulation - ${err.message}`, 'WARNING');
         drawFallbackCamera();
         $("cameraStatus").textContent = "Camera unavailable: simulation active";
         await audit("camera.start", "simulation");
@@ -708,12 +742,14 @@
     }
 
     async function stopCamera() {
+      logToServer(`STOP CAMERA`);
       if (state.cameraStream) {
         state.cameraStream.getTracks().forEach(track => track.stop());
         state.cameraStream = null;
       }
       $("camera").srcObject = null;
       $("cameraStatus").textContent = "Camera stopped";
+      logToServer(`STOP CAMERA COMPLETE`, 'SUCCESS');
     }
 
     function drawFallbackCamera() {
@@ -737,6 +773,7 @@
     }
 
     $("stopCameraBtn").addEventListener("click", async () => {
+      logToServer(`USER CLICK: Stop Camera`);
       await stopCamera();
       await audit("camera.stop", "complete");
       toast("Camera stopped");
@@ -828,13 +865,8 @@
           interval
         );
 
-        $("livenessBadge")
-        .textContent =
-        "Passed";
-
-        $("livenessBadge")
-        .className =
-        "badge safe";
+        $("livenessBadge").textContent = "Passed";
+        $("livenessBadge").className = "badge safe";
 
         $("recognitionResult")
         .textContent =
@@ -888,12 +920,15 @@
       const name = $("personName").value.trim();
       const role = $("personRole").value;
       const passphrase = $("passphrase").value;
+      logToServer(`USER CLICK: Create Vault - name=${name}, role=${role}`);
       if (!name || passphrase.length < 8) {
+        logToServer(`VAULT: Invalid input`, 'WARNING');
         toast("Enter a name and passphrase of at least 8 characters");
         return;
       }
       state.vault = await deriveVaultRecord(name, role, passphrase);
       localStorage.setItem("dl3_vault", JSON.stringify(state.vault));
+      logToServer(`VAULT CREATED: vaultId=${state.vault.vaultId}`, 'SUCCESS');
       renderVault();
       await audit("vault.create", "sealed-local-record");
       toast("Encrypted vault record created");
@@ -901,6 +936,7 @@
 
     $("toggleNetworkBtn").addEventListener("click", async () => {
       state.networkOffline = !state.networkOffline;
+      logToServer(`NETWORK MODE TOGGLED: ${state.networkOffline ? "OFFLINE" : "ONLINE"}`);
       updateMetrics();
       await audit("network.mode", state.networkOffline ? "offline" : "simulated-online");
       toast(state.networkOffline ? "Zero-network mode active" : "Online simulation active");
@@ -908,15 +944,19 @@
 
     $("exportAuditBtn").addEventListener("click", async () => {
       const text = JSON.stringify(state.audit, null, 2);
+      logToServer(`USER CLICK: Export Audit (${state.audit.length} events)`);
       try {
         await navigator.clipboard.writeText(text);
+        logToServer(`AUDIT EXPORTED: Copied to clipboard`, 'SUCCESS');
         toast("Audit copied to clipboard");
       } catch {
+        logToServer(`AUDIT EXPORT: Clipboard unavailable`, 'WARNING');
         toast("Audit ready in the Audit Trail section");
       }
     });
 
     $("clearBtn").addEventListener("click", async () => {
+      logToServer(`USER CLICK: Clear Prototype Data`);
       localStorage.removeItem("dl3_vault");
       localStorage.removeItem("dl3_audit");
       state.vault = null;
@@ -927,6 +967,7 @@
       renderAudit();
       renderChallenges();
       updateMetrics();
+      logToServer(`DATA CLEARED`, 'SUCCESS');
       toast("Prototype data cleared");
     });
 
@@ -960,7 +1001,7 @@
 // FACE RECOGNITION ENGINE
 // =========================
 
-const FACE_MATCH_THRESHOLD = 0.74;
+let FACE_MATCH_THRESHOLD = 0.74;
 let blinkDetected = false;
 let smileDetected = false;
 let headTurnDetected = false;
@@ -1087,8 +1128,11 @@ async () => {
     .value
     .trim();
 
+  logToServer(`USER CLICK: Enroll Face - name=${name}`);
+
   if (!name) {
 
+    logToServer(`ENROLLMENT: No name provided`, 'WARNING');
     toast(
       "Enter operator name first"
     );
@@ -1098,6 +1142,7 @@ async () => {
 
   if (!modelsLoaded) {
 
+    logToServer(`ENROLLMENT: Models not loaded`, 'WARNING');
     toast(
       "Start camera first"
     );
@@ -1118,6 +1163,8 @@ async () => {
     "Look Slightly Up",
     "Look Slightly Down"
   ];
+
+  logToServer(`ENROLLMENT START: ${name} - collecting ${REQUIRED_SAMPLES} samples`);
 
   toast(
     "Starting face enrollment"
@@ -1166,6 +1213,7 @@ async () => {
 
     if (!detection) {
 
+      logToServer(`ENROLLMENT: Face not detected for sample ${i + 1}, retrying...`, 'WARNING');
       toast(
         `Face not detected for sample ${
           i + 1
@@ -1175,6 +1223,8 @@ async () => {
       i--;
       continue;
     }
+
+    logToServer(`ENROLLMENT: Sample ${i + 1}/${REQUIRED_SAMPLES} captured`);
 
     enrollmentSamples
     .push(
@@ -1212,6 +1262,8 @@ async () => {
       filtered
     )
   );
+
+  logToServer(`ENROLLMENT SUCCESS: ${name} - stored ${REQUIRED_SAMPLES} samples`, 'SUCCESS');
 
   $("enrollStatus")
   .textContent =
@@ -1326,8 +1378,9 @@ function detectBlink(landmarks) {
 
   // eye closed threshold
   if (
-    previousEAR > 0.22 &&
-    avgEAR < 0.18
+    previousEAR > 0.25 &&
+    avgEAR < 0.21 &&
+    !blinkDetected
   ) {
 
     blinkDetected = true;
@@ -1340,9 +1393,8 @@ function detectBlink(landmarks) {
   }
 
   previousEAR = avgEAR;
+ 
 }
-
-
 // Smile Detection
 function detectSmile(landmarks) {
 
@@ -1365,20 +1417,21 @@ function detectSmile(landmarks) {
     mouthWidth /
     mouthHeight;
 
-  if (
-    smileRatio > 1.5
-  ) {
+ if (
+  smileRatio > 1.5 &&
+  !smileDetected
+) {
 
-    smileDetected = true;
+  smileDetected = true;
 
-    toast(
-      "Smile Detected"
-    );
+  toast(
+    "Smile Detected"
+  );
 
-    console.log(
-      "Smile detected"
-    );
-  }
+  console.log(
+    "Smile detected"
+  );
+}
 }
 
 
@@ -1397,16 +1450,14 @@ function detectHeadTurn(
     nose[3].x;
 
   const faceCenter =
-    (
-      jaw[0].x +
-      jaw[16].x
-    ) / 2;
+    (jaw[0].x + jaw[16].x) / 2;
 
   const offset =
     noseX - faceCenter;
 
   if (
-    Math.abs(offset) > 20
+    Math.abs(offset) > 20 &&
+    !headTurnDetected
   ) {
 
     headTurnDetected =
@@ -1421,85 +1472,150 @@ function detectHeadTurn(
     );
   }
 }
-$("recognizeBtn")
-.addEventListener(
-  "click",
-  async () => {
 
-    loadDatabase();
+$("recognizeBtn").addEventListener("click", async () => {
+  logToServer(`USER CLICK: Recognize Face`);
+  loadDatabase();
 
-    if (!faceMatcher) {
+  if (!faceMatcher) {
+    logToServer(`RECOGNITION: No enrolled users`, 'WARNING');
+    toast("No enrolled users");
+    return;
+  }
 
-      toast(
-        "No enrolled users"
-      );
+  const video = $("camera");
 
-      return;
-    }
+  // detect all faces so we can reject multi-face frames
+  const detections = await faceapi
+    .detectAllFaces(video, new faceapi.TinyFaceDetectorOptions())
+    .withFaceLandmarks()
+    .withFaceDescriptors();
 
-    const video =
-      $("camera");
+  if (!detections || detections.length === 0) {
+    logToServer(`RECOGNITION: No face detected`, 'WARNING');
+    $("recognitionResult").textContent = "No face found";
+    $("lastDistance").textContent = "N/A";
+    return;
+  }
 
-    const detection =
-      await faceapi
-      .detectSingleFace(
-        video,
-        new faceapi
-        .TinyFaceDetectorOptions()
-      )
-      .withFaceLandmarks()
-      .withFaceDescriptor();
+  if (detections.length > 1) {
+    logToServer(`RECOGNITION: Multiple faces detected (${detections.length}), rejecting`, 'WARNING');
+    $("recognitionResult").textContent = "❌ Multiple faces detected — show one face only.";
+    $("lastDistance").textContent = "—";
+    toast("Multiple faces detected");
+    await audit("recognition", "multiple_faces_rejected");
+    return;
+  }
 
-    if (!detection) {
+  const detection = detections[0];
+  const result = faceMatcher.findBestMatch(detection.descriptor);
+  logToServer(`RECOGNITION: Match found - label=${result.label}, distance=${result.distance.toFixed(3)}, threshold=${FACE_MATCH_THRESHOLD.toFixed(2)}`);
+  $("lastDistance").textContent = result.distance.toFixed(3);
+  updateConfidenceIndicator(result.distance);
 
-      $("recognitionResult")
-      .textContent =
-      "No face found";
+  if (result.distance > FACE_MATCH_THRESHOLD || result.label === "unknown") {
+    logToServer(`RECOGNITION FAILED: distance=${result.distance.toFixed(3)} > threshold=${FACE_MATCH_THRESHOLD.toFixed(2)}`, 'ERROR');
+    $("recognitionResult").textContent = `❌ Unknown Person (distance ${result.distance.toFixed(3)})`;
+    toast("Face not recognized");
+    await audit("recognition", "failed");
+    return;
+  }
 
-      return;
-    }
+  logToServer(
+  `RECOGNITION SUCCESS: ${result.label} (distance=${result.distance.toFixed(3)})`,
+  'SUCCESS'
+);
 
-    const result =
-      faceMatcher.findBestMatch(
-        detection.descriptor
-      );
-      console.log("Distance:", result.distance);
+  const confidence =
+  ((1 - result.distance) * 100).toFixed(1);
 
-    if (
-      result.label ===
-      "unknown"
-    ) {
+  $("recognitionResult").textContent =
+  `✅ Welcome ${result.label}
+  Confidence: ${confidence}%`;
 
-      $("recognitionResult")
-      .textContent =
-      "❌ Unknown Person";
+  toast(`Recognized ${result.label}`);
 
-      toast(
-        "Face not recognized"
-      );
+  await audit("recognition", result.label);
 
-      await audit(
-        "recognition",
-        "failed"
-      );
+  const attendance =
+  JSON.parse(
+    localStorage.getItem("attendance") || "[]"
+  );
 
-      return;
-    }
+const alreadyMarked =
+attendance.some(
+  entry =>
+    entry.name === result.label &&
+    new Date(entry.time).toDateString() ===
+    new Date().toDateString()
+);
 
-    $("recognitionResult")
-    .textContent =
-    `✅ Welcome ${result.label}`;
+if (!alreadyMarked) {
 
-    toast(
-      `Recognized ${result.label}`
-    );
+  attendance.push({
+    name: result.label,
+    time: new Date().toLocaleString(),
+    liveness: "passed",
+    verified: true
+  });
 
-    await audit(
-      "recognition",
-      result.label
-    );
+  await audit(
+    "attendance.checkin",
+    result.label
+  );
 
+  localStorage.setItem(
+    "attendance",
+    JSON.stringify(attendance)
+  );
+
+  toast(
+    `${result.label} attendance marked`
+  );
+
+} else {
+
+  await audit(
+    "attendance.duplicate",
+    result.label
+  );
+
+  toast(
+    `${result.label} already marked today`
+  );
+}
 });
+
+// Threshold slider handling
+$("thresholdSlider").addEventListener("input", (e) => {
+  const v = parseFloat(e.target.value);
+  FACE_MATCH_THRESHOLD = v;
+  logToServer(`THRESHOLD UPDATED: ${v.toFixed(2)}`);
+  $("thresholdVal").textContent = v.toFixed(2);
+  toast(`Threshold set to ${v.toFixed(2)}`);
+});
+
+function updateConfidenceIndicator(distance) {
+  const el = $("lastConfidence");
+  if (!el) return;
+  if (typeof distance !== 'number' || isNaN(distance)) {
+    el.className = 'conf-badge neutral';
+    el.title = 'No distance';
+    return;
+  }
+
+  // Lower distance = better match. Use threshold to decide color bands.
+  if (distance <= FACE_MATCH_THRESHOLD * 0.8) {
+    el.className = 'conf-badge green';
+    el.title = 'High confidence';
+  } else if (distance <= FACE_MATCH_THRESHOLD) {
+    el.className = 'conf-badge yellow';
+    el.title = 'Moderate confidence';
+  } else {
+    el.className = 'conf-badge red';
+    el.title = 'Low confidence';
+  }
+}
   </script>
 </body>
 </html>
