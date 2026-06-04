@@ -2,7 +2,9 @@
 
 Offline-first facial recognition and liveness detection system for secure authentication in zero-network environments with local verification, encrypted vaults, attendance tracking, offline synchronization, and tamper-evident audit logging.
 
-# Datalake 3.0 – Offline Facial Recognition, Liveness Detection & Secure Access System
+**#NHAI Innovation Hackathon 7.0
+#Develop a Mobile Based Secure Offline Facial Recognition and Liveness Detection System for Remote Locations**
+
 
 An offline-first identity verification platform designed for secure authentication in zero-network environments. The system performs local face recognition, liveness verification, encrypted vault management, attendance tracking, audit logging, and offline-to-cloud synchronization without requiring continuous internet connectivity.
 
