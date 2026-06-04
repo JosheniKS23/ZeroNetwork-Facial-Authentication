@@ -459,8 +459,10 @@
         </div>
         <div class="top-actions">
           <button class="btn secondary" id="exportAuditBtn" type="button">Export Audit</button>
+          <button class="btn secondary" id="syncBtn" type="button"> AWS Sync </button>
           <button class="btn warning" id="toggleNetworkBtn" type="button">Simulate Network Loss</button>
           <button class="btn danger" id="clearBtn" type="button">Clear Prototype Data</button>
+          <button class="btn warning" id="purgeBtn" type="button"> Purge Synced </button>
         </div>
       </header>
 
@@ -471,6 +473,7 @@
             <div class="metric"><span>Vault State</span><strong id="metricVault">Locked</strong></div>
             <div class="metric"><span>Liveness Score</span><strong id="metricLive">0%</strong></div>
             <div class="metric"><span>Audit Events</span><strong id="metricAudit">0</strong></div>
+            <div class="metric"> <span>Pending Sync</span> <strong id="metricSync">0</strong> </div>
           </div>
           <div class="grid-2">
             <div class="hero-panel">
@@ -608,6 +611,12 @@
     }
     
     const state = {
+    syncQueue:
+        JSON.parse(
+        localStorage.getItem(
+        "dl3_sync_queue"
+        ) || "[]"
+      ),
       operator: null,
       cameraStream: null,
       livenessScore: 0,
@@ -656,6 +665,7 @@
       $("metricAudit").textContent = state.audit.length;
       $("networkState").textContent = state.networkOffline ? "Network: disabled by design" : "Network: simulated online";
       $("operatorMode").textContent = state.networkOffline ? "Offline mode ready" : "Online simulation";
+      $("metricSync").textContent = state.syncQueue.filter(x => x.status === "pending").length;
     }
 
     function renderAudit() {
@@ -700,6 +710,58 @@
       $("loginError").textContent = "";
       showApp("Field Admin");
     });
+    $("syncBtn")
+.addEventListener(
+"click",
+async ()=>{
+
+  const pending =
+state.syncQueue.filter(
+  item => item.status === "pending"
+);
+
+if (pending.length === 0) {
+  toast("No records pending");
+  return;
+}
+
+  toast(
+    "Syncing to AWS..."
+  );
+
+  await new Promise(
+    resolve=>
+    setTimeout(
+      resolve,
+      1500
+    )
+  );
+
+  state.syncQueue.forEach(
+    item =>
+    item.status =
+    "synced"
+  );
+
+  localStorage.setItem(
+    "dl3_sync_queue",
+    JSON.stringify(
+      state.syncQueue
+    )
+  );
+
+  await audit(
+    "aws.sync",
+    `${state.syncQueue.length} records`
+  );
+
+  updateMetrics();
+
+  toast(
+    "AWS Sync Successful"
+  );
+
+});
 
     document.querySelectorAll(".nav button").forEach(btn => {
       btn.addEventListener("click", () => {
@@ -959,6 +1021,9 @@
       logToServer(`USER CLICK: Clear Prototype Data`);
       localStorage.removeItem("dl3_vault");
       localStorage.removeItem("dl3_audit");
+      localStorage.removeItem("attendance");
+      localStorage.removeItem("face_db");
+      localStorage.removeItem("dl3_sync_queue");
       state.vault = null;
       state.audit = [];
       state.livenessScore = 0;
@@ -1558,11 +1623,26 @@ if (!alreadyMarked) {
     liveness: "passed",
     verified: true
   });
+  state.syncQueue.push({
+  type: "attendance",
+  name: result.label,
+  timestamp:
+    new Date().toISOString(),
+  status: "pending"
+});
 
-  await audit(
-    "attendance.checkin",
-    result.label
-  );
+localStorage.setItem(
+  "dl3_sync_queue",
+  JSON.stringify(
+    state.syncQueue
+  )
+);
+updateMetrics();
+
+await audit(
+  "attendance.checkin",
+  result.label
+);
 
   localStorage.setItem(
     "attendance",
@@ -1616,6 +1696,37 @@ function updateConfidenceIndicator(distance) {
     el.title = 'Low confidence';
   }
 }
+$("purgeBtn")
+.addEventListener(
+"click",
+async ()=>{
+
+  state.syncQueue =
+  state.syncQueue.filter(
+    item =>
+    item.status !==
+    "synced"
+  );
+
+  localStorage.setItem(
+    "dl3_sync_queue",
+    JSON.stringify(
+      state.syncQueue
+    )
+  );
+
+  await audit(
+    "aws.purge",
+    "completed"
+  );
+
+  updateMetrics();
+
+  toast(
+    "Synced records purged"
+  );
+
+});
   </script>
 </body>
 </html>
